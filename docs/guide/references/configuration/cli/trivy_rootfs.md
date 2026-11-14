@@ -47,6 +47,13 @@ trivy rootfs [flags] ROOTDIR
       --enable-modules strings            [EXPERIMENTAL] module names to enable
       --exit-code int                     specify exit code when any security issues are found
       --exit-on-eol int                   exit with the specified code when the OS reaches end of service/life
+      --exit-on-severity strings          severities of security issues that trigger the exit code specified by '--exit-code' (all severities at or above the specified one; defaults to '--severity')
+                                          Allowed values:
+                                            - UNKNOWN
+                                            - LOW
+                                            - MEDIUM
+                                            - HIGH
+                                            - CRITICAL
       --file-patterns strings             specify config file patterns
   -f, --format string                     format
                                           Allowed values:

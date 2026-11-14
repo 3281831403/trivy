@@ -539,6 +539,9 @@ exit-code: 0
 # Same as '--exit-on-eol'
 exit-on-eol: 0
 
+# Same as '--exit-on-severity'
+exit-on-severity: []
+
 # Same as '--format'
 format: "table"
 

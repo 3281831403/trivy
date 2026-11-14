@@ -64,6 +64,13 @@ trivy kubernetes [flags] [CONTEXT]
       --exclude-nodes strings             indicate the node labels that the node-collector job should exclude from scanning (example: kubernetes.io/arch:arm64,team:dev)
       --exclude-owned                     exclude resources that have an owner reference
       --exit-code int                     specify exit code when any security issues are found
+      --exit-on-severity strings          severities of security issues that trigger the exit code specified by '--exit-code' (all severities at or above the specified one; defaults to '--severity')
+                                          Allowed values:
+                                            - UNKNOWN
+                                            - LOW
+                                            - MEDIUM
+                                            - HIGH
+                                            - CRITICAL
       --file-patterns strings             specify config file patterns
   -f, --format string                     format (allowed values: table,json,cyclonedx) (default "table")
       --helm-api-versions strings         Available API versions used for Capabilities.APIVersions. This flag is the same as the api-versions flag of the helm template command. (can specify multiple or separate values with commas: policy/v1/PodDisruptionBudget,apps/v1/Deployment)

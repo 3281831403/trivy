@@ -88,6 +88,14 @@ var (
 		Usage:         "exit with the specified code when the OS reaches end of service/life",
 		TelemetrySafe: true,
 	}
+	ExitOnSeverityFlag = Flag[[]string]{
+		Name:       "exit-on-severity",
+		ConfigName: "exit-on-severity",
+		Values:     dbTypes.SeverityNames,
+		Usage: "severities of security issues that trigger the exit code specified by '--exit-code' " +
+			"(all severities at or above the specified one; defaults to '--severity')",
+		TelemetrySafe: true,
+	}
 	OutputFlag = Flag[string]{
 		Name:       "output",
 		ConfigName: "output",
@@ -140,6 +148,7 @@ type ReportFlagGroup struct {
 	IgnorePolicy    *Flag[string]
 	ExitCode        *Flag[int]
 	ExitOnEOL       *Flag[int]
+	ExitOnSeverity  *Flag[[]string]
 	Output          *Flag[string]
 	OutputPluginArg *Flag[string]
 	Severity        *Flag[[]string]
@@ -157,6 +166,7 @@ type ReportOptions struct {
 	IgnoreFile       string
 	ExitCode         int
 	ExitOnEOL        int
+	ExitOnSeverities []dbTypes.Severity
 	IgnorePolicy     string
 	Output           string
 	OutputPluginArgs []string
@@ -177,6 +187,7 @@ func NewReportFlagGroup() *ReportFlagGroup {
 		IgnorePolicy:    IgnorePolicyFlag.Clone(),
 		ExitCode:        ExitCodeFlag.Clone(),
 		ExitOnEOL:       ExitOnEOLFlag.Clone(),
+		ExitOnSeverity:  ExitOnSeverityFlag.Clone(),
 		Output:          OutputFlag.Clone(),
 		OutputPluginArg: OutputPluginArgFlag.Clone(),
 		Severity:        SeverityFlag.Clone(),
@@ -201,6 +212,7 @@ func (f *ReportFlagGroup) Flags() []Flagger {
 		f.IgnorePolicy,
 		f.ExitCode,
 		f.ExitOnEOL,
+		f.ExitOnSeverity,
 		f.Output,
 		f.OutputPluginArg,
 		f.Severity,
@@ -283,6 +295,7 @@ func (f *ReportFlagGroup) ToOptions(opts *Options) error {
 		IgnoreFile:       f.IgnoreFile.Value(),
 		ExitCode:         f.ExitCode.Value(),
 		ExitOnEOL:        f.ExitOnEOL.Value(),
+		ExitOnSeverities: toSeverity(f.ExitOnSeverity.Value()),
 		IgnorePolicy:     f.IgnorePolicy.Value(),
 		Output:           f.Output.Value(),
 		OutputPluginArgs: outputPluginArgs,

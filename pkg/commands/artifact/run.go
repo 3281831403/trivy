@@ -406,7 +406,7 @@ func Run(ctx context.Context, opts flag.Options, targetKind TargetKind) (err err
 	}
 
 	// Run the application
-	report, err := run(ctx, opts, targetKind)
+	report, failed, err := run(ctx, opts, targetKind)
 	if err != nil {
 		return xerrors.Errorf("run error: %w", err)
 	}
@@ -416,19 +416,19 @@ func Run(ctx context.Context, opts flag.Options, targetKind TargetKind) (err err
 		return xerrors.Errorf("post run error: %w", err)
 	}
 
-	return operation.Exit(opts, report.Results.Failed(), report.Metadata)
+	return operation.Exit(opts, failed, report.Metadata)
 }
 
-func run(ctx context.Context, opts flag.Options, targetKind TargetKind) (types.Report, error) {
+func run(ctx context.Context, opts flag.Options, targetKind TargetKind) (types.Report, bool, error) {
 	// Perform validation checks
 	checkOptions(ctx, opts, targetKind)
 
 	r, err := NewRunner(ctx, opts, targetKind)
 	if err != nil {
 		if errors.Is(err, SkipScan) {
-			return types.Report{}, nil
+			return types.Report{}, false, nil
 		}
-		return types.Report{}, xerrors.Errorf("init error: %w", err)
+		return types.Report{}, false, xerrors.Errorf("init error: %w", err)
 	}
 	defer r.Close(ctx)
 
@@ -443,27 +443,40 @@ func run(ctx context.Context, opts flag.Options, targetKind TargetKind) (types.R
 
 	scanFunction, exists := scans[targetKind]
 	if !exists {
-		return types.Report{}, xerrors.Errorf("unknown target kind: %s", targetKind)
+		return types.Report{}, false, xerrors.Errorf("unknown target kind: %s", targetKind)
 	}
 
 	// 1. Scan the artifact
 	report, err := scanFunction(ctx, opts)
 	if err != nil {
-		return types.Report{}, xerrors.Errorf("%s scan error: %w", targetKind, err)
+		return types.Report{}, false, xerrors.Errorf("%s scan error: %w", targetKind, err)
+	}
+
+	// Determine the exit status before filtering the report for output,
+	// as --exit-on-severity may reference findings that --severity filters out.
+	failed := false
+	if opts.ExitCode != 0 && len(opts.ExitOnSeverities) > 0 {
+		if failed, err = operation.ExitFailure(ctx, opts, report); err != nil {
+			return types.Report{}, false, xerrors.Errorf("exit-on-severity error: %w", err)
+		}
 	}
 
 	// 2. Filter the results
 	report, err = r.Filter(ctx, opts, report)
 	if err != nil {
-		return types.Report{}, xerrors.Errorf("filter error: %w", err)
+		return types.Report{}, false, xerrors.Errorf("filter error: %w", err)
+	}
+
+	if len(opts.ExitOnSeverities) == 0 {
+		failed = report.Results.Failed()
 	}
 
 	// 3. Report the results
 	if err = r.Report(ctx, opts, report); err != nil {
-		return types.Report{}, xerrors.Errorf("report error: %w", err)
+		return types.Report{}, false, xerrors.Errorf("report error: %w", err)
 	}
 
-	return report, nil
+	return report, failed, nil
 }
 
 // checkOptions performs various checks on scan options and shows warnings

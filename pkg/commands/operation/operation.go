@@ -2,18 +2,21 @@ package operation
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/samber/lo"
 	"golang.org/x/xerrors"
 
+	dbTypes "github.com/aquasecurity/trivy-db/pkg/types"
 	"github.com/aquasecurity/trivy/pkg/db"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/flag"
 	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/misconf"
 	"github.com/aquasecurity/trivy/pkg/policy"
+	"github.com/aquasecurity/trivy/pkg/result"
 	"github.com/aquasecurity/trivy/pkg/types"
 	"github.com/aquasecurity/trivy/pkg/vex"
 	"github.com/aquasecurity/trivy/pkg/vex/repo"
@@ -130,4 +133,41 @@ func Exit(opts flag.Options, failedResults bool, m types.Metadata) error {
 		return &types.ExitError{Code: opts.ExitCode}
 	}
 	return nil
+}
+
+// ExitFailure determines whether the report contains findings that should
+// trigger the exit code specified by --exit-code according to --exit-on-severity.
+//
+// The report is filtered on a copy with the exit-on severities (expanded to a
+// threshold, e.g. HIGH also matches CRITICAL) so that suppressions
+// (.trivyignore, VEX, ignore policies) are honored, while the original report
+// is left intact for output filtering by --severity.
+// It must be called before the report is filtered for output.
+func ExitFailure(ctx context.Context, opts flag.Options, report types.Report) (bool, error) {
+	filterOpts := opts.FilterOpts()
+	filterOpts.Severities = thresholdSeverities(opts.ExitOnSeverities)
+
+	// Filter a copy of the report so the original stays intact for output.
+	// Note that result.Filter only reassigns fields on the results,
+	// so a shallow copy of the results slice is sufficient here.
+	r := report
+	r.Results = slices.Clone(report.Results)
+	if err := result.Filter(ctx, r, filterOpts); err != nil {
+		return false, xerrors.Errorf("exit-on-severity filtering error: %w", err)
+	}
+	return r.Results.Failed(), nil
+}
+
+// thresholdSeverities expands the given severities into all severities equal
+// to or higher than the lowest one, e.g. HIGH => [HIGH, CRITICAL].
+func thresholdSeverities(severities []dbTypes.Severity) []dbTypes.Severity {
+	if len(severities) == 0 {
+		return nil
+	}
+	minSev := slices.Min(severities)
+	var expanded []dbTypes.Severity
+	for s := minSev; s <= dbTypes.SeverityCritical; s++ {
+		expanded = append(expanded, s)
+	}
+	return expanded
 }

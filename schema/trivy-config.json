@@ -699,6 +699,20 @@
       "type": "integer",
       "description": "exit with the specified code when the OS reaches end of service/life"
     },
+    "exit-on-severity": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "UNKNOWN",
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "CRITICAL"
+        ]
+      },
+      "description": "severities of security issues that trigger the exit code specified by '--exit-code' (all severities at or above the specified one; defaults to '--severity')"
+    },
     "output": {
       "type": "string",
       "description": "output file name"

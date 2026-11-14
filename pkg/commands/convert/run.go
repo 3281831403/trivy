@@ -46,6 +46,15 @@ func Run(ctx context.Context, opts flag.Options) (err error) {
 		r.Results.DropCryptoFindings()
 	}
 
+	// Determine the exit status before filtering the report for output,
+	// as --exit-on-severity may reference findings that --severity filters out.
+	failed := false
+	if opts.ExitCode != 0 && len(opts.ExitOnSeverities) > 0 {
+		if failed, err = operation.ExitFailure(ctx, opts, r); err != nil {
+			return xerrors.Errorf("exit-on-severity error: %w", err)
+		}
+	}
+
 	if err = result.Filter(ctx, r, opts.FilterOpts()); err != nil {
 		return xerrors.Errorf("unable to filter results: %w", err)
 	}
@@ -62,7 +71,10 @@ func Run(ctx context.Context, opts flag.Options) (err error) {
 		return xerrors.Errorf("unable to write results: %w", err)
 	}
 
-	return operation.Exit(opts, r.Results.Failed(), r.Metadata)
+	if len(opts.ExitOnSeverities) == 0 {
+		failed = r.Results.Failed()
+	}
+	return operation.Exit(opts, failed, r.Metadata)
 }
 
 // compat converts the JSON report to the latest format
