@@ -367,6 +367,15 @@ func (b *BOM) AddRelationship(parent, child *Component, relationshipType Relatio
 		b.AddComponent(child)
 	}
 
+	// A relationship is identified by its parent, child and type. CycloneDX documents can state
+	// the same edge twice - once through nested components and once in the dependencies section -
+	// and storing both would emit duplicate dependency entries.
+	for _, rel := range b.relationships[parent.id] {
+		if rel.Type == relationshipType && rel.Dependency == child.id {
+			return
+		}
+	}
+
 	b.relationships[parent.id] = append(b.relationships[parent.id], Relationship{
 		Type:       relationshipType,
 		Dependency: child.id,

@@ -63,7 +63,13 @@ func (b *BOM) UnmarshalJSON(data []byte) error {
 }
 
 func (b *BOM) parseBOM(bom *cdx.BOM) error {
-	// Convert all CycloneDX components into Trivy components
+	// Flatten the component tree, including components nested at any depth. Third-party SBOMs
+	// can represent the inventory as nested `components` instead of a flat list, and the
+	// dependency graph may cover only the top-level entries.
+	//
+	// Components sharing the same package URL describe the same package. Such a component is
+	// added only once, while every place it appears at (each target that contains it) keeps an
+	// edge to it, so the package shows up under each of its owners.
 	components := b.parseComponents(bom.Components)
 
 	// Convert the metadata component into Trivy component
@@ -150,28 +156,86 @@ func (b *BOM) unmarshalReferenceType(t cdx.ExternalReferenceType) (core.External
 	return referenceType, nil
 }
 
+// parseComponents walks the CycloneDX component tree, including components nested at any
+// depth, and converts it into a flat map of BOM-Refs to Trivy components.
+//
+// A package URL uniquely identifies a package: components carrying the same purl are merged
+// into the first one, so the package is added once and gets a single BOM-Ref. Every nesting
+// site still records an edge from its parent, hence a shared package appears under each target
+// that contains it.
 func (b *BOM) parseComponents(cdxComponents *[]cdx.Component) map[string]*core.Component {
 	components := make(map[string]*core.Component)
+	// purls maps a package URL to the component that owns it, so components repeated with the
+	// same purl resolve to a single package.
+	purls := make(map[string]*core.Component)
 	for _, component := range lo.FromPtr(cdxComponents) {
-		// Trivy writes cryptographic assets but does not read them back yet.
-		if component.Type == cdx.ComponentTypeCryptographicAsset {
-			continue
-		}
-
-		c, err := b.parseComponent(component)
-		if errors.Is(err, ErrUnsupportedType) {
-			log.Info("Skipping the component with the unsupported type",
-				log.String("bom-ref", component.BOMRef), log.String("type", string(component.Type)))
-			continue
-		} else if err != nil {
-			log.Warn("Failed to parse component", log.Err(err))
-			continue
-		}
-
-		b.BOM.AddComponent(c)
-		components[component.BOMRef] = c
+		b.parseNestedComponents(component, nil, components, purls)
 	}
 	return components
+}
+
+// parseNestedComponents converts a CycloneDX component and, recursively, all of its nested
+// components. parent is the component the current one is nested into, or nil at the top level.
+func (b *BOM) parseNestedComponents(component cdx.Component, parent *core.Component,
+	components map[string]*core.Component, purls map[string]*core.Component,
+) {
+	// Trivy writes cryptographic assets but does not read them back yet.
+	if component.Type == cdx.ComponentTypeCryptographicAsset {
+		return
+	}
+
+	c, err := b.parseComponent(component)
+	if errors.Is(err, ErrUnsupportedType) {
+		log.Info("Skipping the component with the unsupported type",
+			log.String("bom-ref", component.BOMRef), log.String("type", string(component.Type)))
+	} else if err != nil {
+		log.Warn("Failed to parse component", log.Err(err))
+	} else {
+		// Merge components that describe the same package, identified by its package URL. The
+		// first occurrence wins: a package is added once and keeps a single BOM-Ref.
+		var purl string
+		if c.PkgIdentifier.PURL != nil {
+			purl = c.PkgIdentifier.PURL.String()
+		}
+		if existing, ok := purls[purl]; ok && purl != "" {
+			c = existing
+		} else {
+			b.BOM.AddComponent(c)
+			if purl != "" {
+				purls[purl] = c
+			}
+		}
+
+		// A BOM-Ref may be reused by several nested occurrences of the same package; all of them
+		// resolve to the same component.
+		components[component.BOMRef] = c
+
+		// Record the nesting. Without an edge the flattened children would be disconnected from
+		// their target, and a package shared by several applications would be reachable from only
+		// one of them.
+		if parent != nil {
+			b.addNestingRelationship(parent, c)
+		}
+		parent = c
+	}
+
+	// Walk nested components even when the current one was skipped, so a failed component does
+	// not hide the whole subtree underneath it.
+	for _, child := range lo.FromPtr(component.Components) {
+		b.parseNestedComponents(child, parent, components, purls)
+	}
+}
+
+// addNestingRelationship turns the CycloneDX component nesting into a Trivy relationship.
+// Applications, operating systems and other targets contain their packages; a nested package
+// is treated as a dependency of its parent package, so parent packages see their subpackages.
+func (b *BOM) addNestingRelationship(parent, child *core.Component) {
+	switch parent.Type {
+	case core.TypeLibrary:
+		b.BOM.AddRelationship(parent, child, core.RelationshipDependsOn)
+	default:
+		b.BOM.AddRelationship(parent, child, core.RelationshipContains)
+	}
 }
 
 func (b *BOM) parseComponent(c cdx.Component) (*core.Component, error) {

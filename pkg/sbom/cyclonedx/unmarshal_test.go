@@ -1,11 +1,14 @@
 package cyclonedx_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"testing"
 
 	"github.com/package-url/packageurl-go"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -783,6 +786,190 @@ func TestUnmarshaler_Unmarshal(t *testing.T) {
 			},
 		},
 		{
+			name:      "happy path for BOM with nested components",
+			inputFile: "testdata/happy/nested-components-bom.json",
+			want: types.SBOM{
+				Applications: []ftypes.Application{
+					{
+						Type:     ftypes.GoBinary,
+						FilePath: "app1/package-lock.json",
+						Packages: ftypes.Packages{
+							{
+								ID:      "example/root-pkg@1.0.0",
+								Name:    "example/root-pkg",
+								Version: "1.0.0",
+								Identifier: ftypes.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeNPM,
+										Namespace: "example",
+										Name:      "root-pkg",
+										Version:   "1.0.0",
+									},
+									BOMRef: "pkg:npm/example/root-pkg@1.0.0",
+								},
+								DependsOn: []string{
+									"example/shared-pkg@2.0.0",
+								},
+							},
+							{
+								ID:      "example/shared-pkg@2.0.0",
+								Name:    "example/shared-pkg",
+								Version: "2.0.0",
+								Identifier: ftypes.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeNPM,
+										Namespace: "example",
+										Name:      "shared-pkg",
+										Version:   "2.0.0",
+									},
+									BOMRef: "pkg:npm/example/shared-pkg@2.0.0",
+								},
+								DependsOn: []string{
+									"example/deep-pkg@3.0.0",
+								},
+							},
+							{
+								ID:      "example/deep-pkg@3.0.0",
+								Name:    "example/deep-pkg",
+								Version: "3.0.0",
+								Identifier: ftypes.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeNPM,
+										Namespace: "example",
+										Name:      "deep-pkg",
+										Version:   "3.0.0",
+									},
+									BOMRef: "pkg:npm/example/deep-pkg@3.0.0",
+								},
+							},
+						},
+					},
+					{
+						Type:     ftypes.GoBinary,
+						FilePath: "app2/package-lock.json",
+						Packages: ftypes.Packages{
+							{
+								ID:      "example/other-pkg@4.0.0",
+								Name:    "example/other-pkg",
+								Version: "4.0.0",
+								Identifier: ftypes.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeNPM,
+										Namespace: "example",
+										Name:      "other-pkg",
+										Version:   "4.0.0",
+									},
+									BOMRef: "pkg:npm/example/other-pkg@4.0.0",
+								},
+								DependsOn: []string{
+									"example/shared-pkg@2.0.0",
+								},
+							},
+							// The shared package is reachable from both applications, even though
+							// it is a single component with a single BOM-Ref. Its own dependencies
+							// are reachable from both applications as well.
+							{
+								ID:      "example/shared-pkg@2.0.0",
+								Name:    "example/shared-pkg",
+								Version: "2.0.0",
+								Identifier: ftypes.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeNPM,
+										Namespace: "example",
+										Name:      "shared-pkg",
+										Version:   "2.0.0",
+									},
+									BOMRef: "pkg:npm/example/shared-pkg@2.0.0",
+								},
+								DependsOn: []string{
+									"example/deep-pkg@3.0.0",
+								},
+							},
+							{
+								ID:      "example/deep-pkg@3.0.0",
+								Name:    "example/deep-pkg",
+								Version: "3.0.0",
+								Identifier: ftypes.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeNPM,
+										Namespace: "example",
+										Name:      "deep-pkg",
+										Version:   "3.0.0",
+									},
+									BOMRef: "pkg:npm/example/deep-pkg@3.0.0",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:      "happy path for nested OS packages",
+			inputFile: "testdata/happy/nested-os-packages-bom.json",
+			want: types.SBOM{
+				Metadata: types.Metadata{
+					OS: &ftypes.OS{
+						Family: "alpine",
+						Name:   "3.20.0",
+					},
+				},
+				Packages: []ftypes.PackageInfo{
+					{
+						Packages: ftypes.Packages{
+							{
+								ID:         "busybox@1.36.1-r0",
+								Name:       "busybox",
+								Version:    "1.36.1-r0",
+								SrcName:    "busybox",
+								SrcVersion: "1.36.1-r0",
+								Identifier: ftypes.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeApk,
+										Namespace: "alpine",
+										Name:      "busybox",
+										Version:   "1.36.1-r0",
+										Qualifiers: packageurl.Qualifiers{
+											{
+												Key:   "distro",
+												Value: "3.20.0",
+											},
+										},
+									},
+									BOMRef: "pkg:apk/alpine/busybox@1.36.1-r0?distro=3.20.0",
+								},
+								DependsOn: []string{
+									"musl@1.2.5-r0",
+								},
+							},
+							{
+								ID:         "musl@1.2.5-r0",
+								Name:       "musl",
+								Version:    "1.2.5-r0",
+								SrcName:    "musl",
+								SrcVersion: "1.2.5-r0",
+								Identifier: ftypes.PkgIdentifier{
+									PURL: &packageurl.PackageURL{
+										Type:      packageurl.TypeApk,
+										Namespace: "alpine",
+										Name:      "musl",
+										Version:   "1.2.5-r0",
+										Qualifiers: packageurl.Qualifiers{
+											{
+												Key:   "distro",
+												Value: "3.20.0",
+											},
+										},
+									},
+									BOMRef: "pkg:apk/alpine/musl@1.2.5-r0?distro=3.20.0",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			name:      "happy path only os component",
 			inputFile: "testdata/happy/os-only-bom.json",
 			want: types.SBOM{
@@ -977,6 +1164,91 @@ func TestUnmarshaler_Unmarshal(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestUnmarshaler_NestedComponentsRoundTrip makes sure a third-party CycloneDX document using
+// nested components survives a conversion back to CycloneDX and a second read: every nested
+// package stays in the inventory, a shared package keeps a single BOM-Ref while remaining
+// reachable from every target, and the package count and dependency edges stay unchanged.
+func TestUnmarshaler_NestedComponentsRoundTrip(t *testing.T) {
+	decode := func(t *testing.T, r io.Reader) types.SBOM {
+		var bom cyclonedx.BOM
+		require.NoError(t, json.NewDecoder(r).Decode(&bom))
+
+		var sbom types.SBOM
+		require.NoError(t, sbomio.NewDecoder(bom.BOM).Decode(t.Context(), &sbom))
+		sbom.BOM = nil
+		return sbom
+	}
+
+	f, err := os.Open("testdata/happy/nested-components-bom.json")
+	require.NoError(t, err)
+	defer f.Close()
+	first := decode(t, f)
+
+	// Re-marshal the parsed BOM the way `trivy --format cyclonedx` does, then read it back.
+	var parsed cyclonedx.BOM
+	f2, err := os.Open("testdata/happy/nested-components-bom.json")
+	require.NoError(t, err)
+	defer f2.Close()
+	require.NoError(t, json.NewDecoder(f2).Decode(&parsed))
+
+	marshaler := cyclonedx.NewMarshaler("dev")
+	doc, err := marshaler.Marshal(t.Context(), parsed.BOM)
+	require.NoError(t, err)
+
+	data, err := json.Marshal(doc)
+	require.NoError(t, err)
+	second := decode(t, bytes.NewReader(data))
+
+	assert.Equal(t, countPackages(first), countPackages(second))
+	assert.Equal(t, dependencyEdges(first), dependencyEdges(second))
+
+	// The shared package is represented by a single component, hence a single BOM-Ref.
+	var refs []string
+	for _, c := range *doc.Components {
+		refs = append(refs, c.BOMRef)
+	}
+	assert.ElementsMatch(t, refs, lo.Uniq(refs))
+
+	// Dependency edges must not be duplicated either.
+	var edges [][2]string
+	for _, d := range *doc.Dependencies {
+		for _, dep := range lo.FromPtr(d.Dependencies) {
+			edges = append(edges, [2]string{d.Ref, dep})
+		}
+	}
+	assert.ElementsMatch(t, edges, lo.Uniq(edges))
+}
+
+func countPackages(sbom types.SBOM) int {
+	var n int
+	for _, app := range sbom.Applications {
+		n += len(app.Packages)
+	}
+	for _, pi := range sbom.Packages {
+		n += len(pi.Packages)
+	}
+	return n
+}
+
+func dependencyEdges(sbom types.SBOM) [][2]string {
+	var edges [][2]string
+	for _, app := range sbom.Applications {
+		for _, p := range app.Packages {
+			for _, dep := range p.DependsOn {
+				edges = append(edges, [2]string{p.ID, dep})
+			}
+		}
+	}
+	for _, pi := range sbom.Packages {
+		for _, p := range pi.Packages {
+			for _, dep := range p.DependsOn {
+				edges = append(edges, [2]string{p.ID, dep})
+			}
+		}
+	}
+	return edges
 }
 
 // Trivy writes cryptographic assets into a CycloneDX document and drops them when reading

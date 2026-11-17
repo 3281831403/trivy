@@ -1,0 +1,76 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2025-01-01T00:00:00+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "group": "vendor",
+          "name": "vendor-sbom-generator",
+          "version": "1.0.0"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "host-root",
+      "type": "container",
+      "name": "host",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:SchemaVersion",
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "os-target",
+      "type": "operating-system",
+      "name": "alpine",
+      "version": "3.20.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "alpine"
+        },
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "os-pkgs"
+        }
+      ],
+      "components": [
+        {
+          "bom-ref": "pkg:apk/alpine/busybox@1.36.1-r0?distro=3.20.0",
+          "type": "library",
+          "name": "busybox",
+          "version": "1.36.1-r0",
+          "purl": "pkg:apk/alpine/busybox@1.36.1-r0?distro=3.20.0",
+          "components": [
+            {
+              "bom-ref": "pkg:apk/alpine/musl@1.2.5-r0?distro=3.20.0",
+              "type": "library",
+              "name": "musl",
+              "version": "1.2.5-r0",
+              "purl": "pkg:apk/alpine/musl@1.2.5-r0?distro=3.20.0"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "host-root",
+      "dependsOn": [
+        "os-target"
+      ]
+    }
+  ],
+  "vulnerabilities": []
+}

@@ -38,6 +38,10 @@ type Decoder struct {
 	pkgs map[uuid.UUID]*ftypes.Package
 	apps map[uuid.UUID]*ftypes.Application
 
+	// owned holds the packages reached from an OS or application component while traversing
+	// relationships. Packages never reached are treated as orphans.
+	owned map[uuid.UUID]struct{}
+
 	logger *log.Logger
 }
 
@@ -46,6 +50,7 @@ func NewDecoder(bom *core.BOM) *Decoder {
 		bom:    bom,
 		pkgs:   make(map[uuid.UUID]*ftypes.Package),
 		apps:   make(map[uuid.UUID]*ftypes.Application),
+		owned:  make(map[uuid.UUID]struct{}),
 		logger: log.WithPrefix("sbom"),
 	}
 }
@@ -335,24 +340,39 @@ func (m *Decoder) addLangPkgs(sbom *types.SBOM) {
 	}
 }
 
-// traverseDependencies recursively retrieves all packages that the specified component depends on.
-// It starts from the given component ID and traverses the dependency tree, collecting all
-// dependent packages. The collected packages are removed from m.pkgs to prevent duplicate
-// processing. This ensures that all dependencies, including transitive ones, are properly
-// captured and associated with their parent component.
+// traverseDependencies recursively retrieves all packages that the specified component depends
+// on, starting from the given component and following the dependency tree.
+//
+// Each root (an OS or an application) is traversed with its own visited set, so a package shared
+// by several roots is returned for every one of them instead of being consumed by the first
+// traversal. A package is still added only once within a single tree: visited both breaks cycles
+// and prevents duplicates when the dependency graph merges and splits again.
 func (m *Decoder) traverseDependencies(id uuid.UUID) ftypes.Packages {
+	visited := make(map[uuid.UUID]struct{})
+	return m.collectDependencies(id, visited)
+}
+
+func (m *Decoder) collectDependencies(id uuid.UUID, visited map[uuid.UUID]struct{}) ftypes.Packages {
 	var pkgs ftypes.Packages
 	for _, rel := range m.bom.Relationships()[id] {
 		pkg, ok := m.pkgs[rel.Dependency]
 		if !ok {
+			// Keep traversing non-package components (e.g. nested applications) so the packages
+			// below them are not lost.
+			pkgs = append(pkgs, m.collectDependencies(rel.Dependency, visited)...)
 			continue
 		}
+		if _, seen := visited[rel.Dependency]; seen {
+			continue
+		}
+		visited[rel.Dependency] = struct{}{}
+		m.owned[rel.Dependency] = struct{}{}
+
 		// Add the current package
 		pkgs = append(pkgs, *pkg)
-		delete(m.pkgs, rel.Dependency) // Delete the added package
 
 		// Add the nested packages
-		pkgs = append(pkgs, m.traverseDependencies(rel.Dependency)...)
+		pkgs = append(pkgs, m.collectDependencies(rel.Dependency, visited)...)
 	}
 	return pkgs
 }
@@ -362,7 +382,11 @@ func (m *Decoder) traverseDependencies(id uuid.UUID) ftypes.Packages {
 func (m *Decoder) addOrphanPkgs(sbom *types.SBOM) error {
 	osPkgMap := make(map[string]ftypes.Packages)
 	langPkgMap := make(map[ftypes.LangType]ftypes.Packages)
-	for _, pkg := range m.pkgs {
+	for id, pkg := range m.pkgs {
+		// Packages reached while traversing the OS or applications are already assigned.
+		if _, ok := m.owned[id]; ok {
+			continue
+		}
 		p := (*purl.PackageURL)(pkg.Identifier.PURL)
 		switch p.Class() {
 		case types.ClassOSPkg:

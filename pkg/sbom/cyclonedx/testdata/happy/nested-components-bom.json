@@ -1,0 +1,131 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2025-01-01T00:00:00+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "group": "vendor",
+          "name": "vendor-sbom-generator",
+          "version": "1.0.0"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "system-root",
+      "type": "application",
+      "name": "multi-app-system",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:SchemaVersion",
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "app1",
+      "type": "application",
+      "name": "app1/package-lock.json",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "gobinary"
+        }
+      ],
+      "components": [
+        {
+          "bom-ref": "pkg:npm/example/root-pkg@1.0.0",
+          "type": "library",
+          "name": "root-pkg",
+          "group": "example",
+          "version": "1.0.0",
+          "purl": "pkg:npm/example/root-pkg@1.0.0",
+          "components": [
+            {
+              "bom-ref": "pkg:npm/example/shared-pkg@2.0.0",
+              "type": "library",
+              "name": "shared-pkg",
+              "group": "example",
+              "version": "2.0.0",
+              "purl": "pkg:npm/example/shared-pkg@2.0.0",
+              "components": [
+                {
+                  "bom-ref": "pkg:npm/example/deep-pkg@3.0.0",
+                  "type": "library",
+                  "name": "deep-pkg",
+                  "group": "example",
+                  "version": "3.0.0",
+                  "purl": "pkg:npm/example/deep-pkg@3.0.0"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "bom-ref": "app2",
+      "type": "application",
+      "name": "app2/package-lock.json",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "gobinary"
+        }
+      ],
+      "components": [
+        {
+          "bom-ref": "pkg:npm/example/other-pkg@4.0.0",
+          "type": "library",
+          "name": "other-pkg",
+          "group": "example",
+          "version": "4.0.0",
+          "purl": "pkg:npm/example/other-pkg@4.0.0",
+          "components": [
+            {
+              "bom-ref": "shared-pkg-second-occurrence",
+              "type": "library",
+              "name": "shared-pkg",
+              "group": "example",
+              "version": "2.0.0",
+              "purl": "pkg:npm/example/shared-pkg@2.0.0"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "system-root",
+      "dependsOn": [
+        "app1",
+        "app2"
+      ]
+    },
+    {
+      "ref": "app1",
+      "dependsOn": []
+    },
+    {
+      "ref": "app2",
+      "dependsOn": []
+    }
+  ],
+  "vulnerabilities": []
+}
